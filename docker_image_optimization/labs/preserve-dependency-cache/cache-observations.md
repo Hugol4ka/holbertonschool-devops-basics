@@ -1,7 +1,10 @@
 # Cache Observations
 
-- Unoptimized source-only rebuild result:
-- Cached Dockerfile first build result:
-- Cached Dockerfile source-only rebuild result:
-- Why the dependency layer remained cached:
-- Change that would invalidate the dependency layer:
+- Unoptimized source-only rebuild result: The npm ci step re-ran fully on every build (no CACHED), even when only a comment was added to src/server.js, because COPY . . copies source and dependency files together in a single instruction.
+- Cached Dockerfile first build result: The first build of Dockerfile.cached executed npm ci normally (no cache available yet), producing the same ~3.6s delay and npm output as the unoptimized build.
+- Cached Dockerfile source-only rebuild result:After modifying src/server.js, the second build of Dockerfile.cached showed [5/7] RUN npm ci --omit=dev... as CACHED (0.0s, no npm output), while COPY src ./src and COPY test ./test were re-executed since they depend on the changed file.
+- Why the dependency layer remained cached: The dependency layer stayed cached because RUN npm ci only depends on the instructions that precede it (package.json, package-lock.json, packages/message-format). Since src/server.js is copied in a later, separate instruction, modifying this file has no effect on the hash/fingerprint of step npm ci, which remains identical and therefore reusable.
+- Change that would invalidate the dependency layer: Modifying `package.json`, `package-lock.json` (e.g. adding a new dependency), or any file inside `packages/message-format/` would invalidate the `RUN npm ci` cache, since these are the files copied before that instruction.
+
+
+COPY. . copies all context files into a single statement — including server.js and package.json together. Docker calculates a fingerprint (a hash) of the total content copied by this instruction. As soon as any file concerned changes (here, server.js) this fingerprint changes, therefore COPY. . is considered "different" from the previous build → cache invalidated for this instruction.

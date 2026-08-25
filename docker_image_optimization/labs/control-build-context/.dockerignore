@@ -1,0 +1,5 @@
+.git
+.env
+*.log
+local-only/
+reports/
